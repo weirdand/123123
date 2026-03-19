@@ -1,14 +1,37 @@
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
-from app.api.endpoints.devices import ws_manager
+import asyncio
+import json
 
 router = APIRouter()
 
-@router.websocket("/ws/devices")
-async def devices_websocket(websocket: WebSocket):
-    await ws_manager.connect(websocket)
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+        print(f"WebSocket подключен: {len(self.active_connections)}")
+
+    def disconnect(self, websocket: WebSocket):
+        self.active_connections.remove(websocket)
+        print(f"WebSocket отключен: {len(self.active_connections)}")
+
+    async def broadcast(self, message: str):
+        for connection in self.active_connections:
+            try:
+                await connection.send_text(message)
+            except:
+                pass
+
+manager = ConnectionManager()
+
+@router.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
     try:
         while True:
-            # Просто держим соединение открытым
+            # Ждем сообщение или просто держим соединение
             await websocket.receive_text()
     except WebSocketDisconnect:
-        ws_manager.disconnect(websocket)
+        manager.disconnect(websocket)
